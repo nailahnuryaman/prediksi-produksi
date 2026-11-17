@@ -3,12 +3,8 @@ import numpy as np
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 import pandas as pd
-import plotly.graph_objects as go
 from statsmodels.tsa.ar_model import AutoReg
 from statsmodels.tsa.vector_ar.var_model import VAR
-import streamlit as st
-
-st.set_page_config(page_title="Dashboard Peramalan PO Konveksi", layout="wide")
 
 NAMA_BULAN = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -21,64 +17,6 @@ def hitung_tahun_bulan(periode: int):
     tahun = total_bulan // 12
     bulan = NAMA_BULAN[total_bulan % 12]
     return tahun, bulan
-
-
-def inisialisasi_data():
-    if "df_bulanan" not in st.session_state:
-        po_bulanan = [
-            974, 924, 1622, 1301, 736, 710, 1611, 975, 1075, 972,
-            1420, 1071, 1137, 1213, 1630, 1411, 877, 1657, 2175, 1539,
-            1135, 798, 1207, 1231, 807, 1380, 886, 807, 942, 1052, 2043, 1728
-        ]
-        rows = []
-        for idx, val in enumerate(po_bulanan, start=1):
-            thn, bln = hitung_tahun_bulan(idx)
-            rows.append({
-                "Tahun": thn,
-                "Bulan": bln,
-                "Periode": idx,
-                "Jumlah PO": int(val),
-                "Status Data": "Aktual",
-            })
-        st.session_state.df_bulanan = pd.DataFrame(rows)
-
-    if "df_produk" not in st.session_state:
-        data_prod = {
-            "WORKJACKET": [
-                281, 207, 575, 301, 193, 36, 345, 210, 0, 0,
-                579, 313, 237, 862, 217, 455, 228, 259, 391, 511,
-                547, 339, 687, 931, 265, 519, 329, 582, 720, 393, 1503, 1396
-            ],
-            "VARSITY": [
-                251, 544, 422, 818, 310, 560, 1203, 441, 594, 300,
-                523, 658, 790, 351, 562, 597, 509, 312, 432, 254,
-                491, 303, 333, 160, 100, 104, 204, 75, 70, 378, 100, 87
-            ],
-            "COACH": [
-                330, 90, 573, 134, 233, 101, 26, 151, 0, 122,
-                37, 64, 110, 0, 0, 0, 0, 0, 89, 197,
-                97, 71, 73, 24, 0, 15, 0, 0, 22, 150, 82, 137
-            ],
-        }
-        rows = []
-        for idx in range(1, 33):
-            thn, bln = hitung_tahun_bulan(idx)
-            rows.append({
-                "Tahun": thn,
-                "Bulan": bln,
-                "Periode": idx,
-                "WORKJACKET": data_prod["WORKJACKET"][idx - 1],
-                "VARSITY": data_prod["VARSITY"][idx - 1],
-                "COACH": data_prod["COACH"][idx - 1],
-                "Status Data": "Aktual",
-            })
-        st.session_state.df_produk = pd.DataFrame(rows)
-        st.session_state.daftar_produk = ["WORKJACKET", "VARSITY", "COACH"]
-
-    if "mode_edit_bulanan" not in st.session_state:
-        st.session_state.mode_edit_bulanan = False
-    if "mode_edit_produk" not in st.session_state:
-        st.session_state.mode_edit_produk = False
 
 
 def buat_prediksi_ar_bulanan(df_aktual: pd.DataFrame):
@@ -101,7 +39,7 @@ def buat_prediksi_ar_bulanan(df_aktual: pd.DataFrame):
 
     try:
         if len(y) < 3 or np.std(y) == 0:
-            raise ValueError("Data tidak cukup atau konstan untuk AutoReg")
+            raise ValueError("Data tidak cukup atau konstan")
         model = AutoReg(y, lags=lags)
         model_fitted = model.fit()
         pred = model_fitted.predict(start=len(y), end=len(y) + 2)
@@ -235,24 +173,14 @@ def buat_file_excel(
         df.to_excel(writer, index=False, sheet_name=nama_sheet, startrow=0)
         ws = writer.sheets[nama_sheet]
 
-        header_fill = PatternFill(
-            start_color="1E3A5F", end_color="1E3A5F", fill_type="solid"
-        )
-        eval_header_fill = PatternFill(
-            start_color="334155", end_color="334155", fill_type="solid"
-        )
+        header_fill = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+        eval_header_fill = PatternFill(start_color="334155", end_color="334155", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
-        pred_fill = PatternFill(
-            start_color="FEF9C3", end_color="FEF9C3", fill_type="solid"
-        )
+        pred_fill = PatternFill(start_color="FEF9C3", end_color="FEF9C3", fill_type="solid")
         pred_font = Font(color="1E293B", bold=True)
-        eval_fill = PatternFill(
-            start_color="F1F5F9", end_color="F1F5F9", fill_type="solid"
-        )
+        eval_fill = PatternFill(start_color="F1F5F9", end_color="F1F5F9", fill_type="solid")
         thin_side = Side(border_style="thin", color="CBD5E1")
-        border_style = Border(
-            left=thin_side, right=thin_side, top=thin_side, bottom=thin_side
-        )
+        border_style = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
         for col_idx in range(1, len(df.columns) + 1):
             cell = ws.cell(row=1, column=col_idx)
@@ -330,217 +258,3 @@ def buat_file_excel(
         ws.freeze_panes = "A2"
 
     return output.getvalue()
-
-
-inisialisasi_data()
-
-st.sidebar.title("📌 Menu Navigasi")
-halaman = st.sidebar.radio(
-    "Pilih Halaman:", ["1. PO Bulanan", "2. Peramalan Produk Utama"]
-)
-
-st.sidebar.markdown("---")
-st.sidebar.subheader("📂 Import Data dari Excel / CSV")
-uploaded_file = st.sidebar.file_uploader(
-    "Upload file template Excel (.xlsx) atau CSV", type=["xlsx", "csv"]
-)
-
-if uploaded_file is not None:
-    try:
-        if uploaded_file.name.endswith(".csv"):
-            df_up = pd.read_csv(uploaded_file)
-        else:
-            df_up = pd.read_excel(uploaded_file)
-
-        df_up.columns = [str(c).strip() for c in df_up.columns]
-
-        if "Status Data" in df_up.columns:
-            df_up = df_up[
-                df_up["Status Data"].astype(str).str.strip().str.lower() == "aktual"
-            ].copy()
-
-        if "Periode" in df_up.columns:
-            df_up["Periode"] = pd.to_numeric(df_up["Periode"], errors="coerce")
-            df_up = df_up.dropna(subset=["Periode"]).copy()
-            df_up["Periode"] = df_up["Periode"].astype(int)
-
-        if "Periode" in df_up.columns:
-            thn_bln_auto = [hitung_tahun_bulan(p) for p in df_up["Periode"]]
-            if "Tahun" not in df_up.columns:
-                df_up["Tahun"] = [tb[0] for tb in thn_bln_auto]
-            else:
-                df_up["Tahun"] = pd.to_numeric(
-                    df_up["Tahun"], errors="coerce"
-                ).ffill()
-                df_up["Tahun"] = df_up["Tahun"].fillna(
-                    pd.Series([tb[0] for tb in thn_bln_auto], index=df_up.index)
-                ).astype(int)
-
-            if "Bulan" not in df_up.columns:
-                df_up["Bulan"] = [tb[1] for tb in thn_bln_auto]
-            else:
-                df_up["Bulan"] = df_up["Bulan"].fillna(
-                    pd.Series([tb[1] for tb in thn_bln_auto], index=df_up.index)
-                )
-
-        mode_import = st.sidebar.radio(
-            "Pilih cara memproses file:",
-            [
-                "Tambahkan data baru ke dashboard",
-                "Ganti seluruh data dengan file ini",
-            ],
-        )
-
-        if st.sidebar.button("🚀 Proses File Excel", use_container_width=True):
-            if "Periode" not in df_up.columns:
-                st.sidebar.error("File harus memiliki kolom 'Periode'!")
-            else:
-                berhasil_proses = False
-
-                if "Jumlah PO" in df_up.columns:
-                    df_b_baru = df_up.copy()
-                    df_b_baru["Jumlah PO"] = pd.to_numeric(
-                        df_b_baru["Jumlah PO"], errors="coerce"
-                    )
-                    df_b_baru = df_b_baru.dropna(subset=["Jumlah PO"]).copy()
-                    df_b_baru["Jumlah PO"] = df_b_baru["Jumlah PO"].astype(int)
-                    df_b_baru["Status Data"] = "Aktual"
-                    df_b_baru = df_b_baru[
-                        ["Tahun", "Bulan", "Periode", "Jumlah PO", "Status Data"]
-                    ]
-
-                    if mode_import == "Tambahkan data baru ke dashboard":
-                        gabung = pd.concat(
-                            [st.session_state.df_bulanan, df_b_baru],
-                            ignore_index=True,
-                        )
-                        gabung = (
-                            gabung.drop_duplicates(subset=["Periode"], keep="last")
-                            .sort_values("Periode")
-                            .reset_index(drop=True)
-                        )
-                        st.session_state.df_bulanan = gabung
-                    else:
-                        st.session_state.df_bulanan = df_b_baru.sort_values(
-                            "Periode"
-                        ).reset_index(drop=True)
-                    berhasil_proses = True
-
-                kolom_meta = {
-                    "Tahun",
-                    "Bulan",
-                    "Periode",
-                    "Jumlah PO",
-                    "Status Data",
-                }
-                kolom_prod_file = [
-                    c
-                    for c in df_up.columns
-                    if c not in kolom_meta and not c.startswith("Unnamed")
-                ]
-
-                if kolom_prod_file:
-                    df_p_baru = df_up.copy()
-                    for c in kolom_prod_file:
-                        df_p_baru[c] = pd.to_numeric(
-                            df_p_baru[c], errors="coerce"
-                        )
-                    df_p_baru = df_p_baru.dropna(
-                        subset=kolom_prod_file, how="all"
-                    ).copy()
-                    for c in kolom_prod_file:
-                        df_p_baru[c] = df_p_baru[c].fillna(0).astype(int)
-                    df_p_baru["Status Data"] = "Aktual"
-                    df_p_baru = df_p_baru[
-                        ["Tahun", "Bulan", "Periode"]
-                        + kolom_prod_file
-                        + ["Status Data"]
-                    ]
-
-                    if mode_import == "Tambahkan data baru ke dashboard":
-                        gabung_p = pd.concat(
-                            [st.session_state.df_produk, df_p_baru],
-                            ignore_index=True,
-                        )
-                        gabung_p = (
-                            gabung_p.drop_duplicates(subset=["Periode"], keep="last")
-                            .sort_values("Periode")
-                            .reset_index(drop=True)
-                        )
-                        for c in kolom_prod_file:
-                            if c not in st.session_state.daftar_produk:
-                                st.session_state.daftar_produk.append(c)
-                            gabung_p[c] = gabung_p[c].fillna(0).astype(int)
-                        st.session_state.df_produk = gabung_p[
-                            ["Tahun", "Bulan", "Periode"]
-                            + st.session_state.daftar_produk
-                            + ["Status Data"]
-                        ]
-                    else:
-                        st.session_state.daftar_produk = kolom_prod_file
-                        st.session_state.df_produk = df_p_baru.sort_values(
-                            "Periode"
-                        ).reset_index(drop=True)
-                    berhasil_proses = True
-
-                if berhasil_proses:
-                    st.sidebar.success(
-                        "Data dari file berhasil diproses ke dashboard!"
-                    )
-                    st.rerun()
-                else:
-                    st.sidebar.warning(
-                        "Tidak ditemukan kolom 'Jumlah PO' atau kolom produk yang valid."
-                    )
-
-    except Exception as e:
-        st.sidebar.error(f"Gagal membaca file: {e}")
-
-st.sidebar.markdown("---")
-if st.sidebar.button("🔄 Reset ke Data Awal (Periode 1–32)"):
-    for key in [
-        "df_bulanan",
-        "df_produk",
-        "daftar_produk",
-        "mode_edit_bulanan",
-        "mode_edit_produk",
-    ]:
-        if key in st.session_state:
-            del st.session_state[key]
-    st.rerun()
-
-# ==============================================================================
-# HALAMAN 1: PO BULANAN
-# ==============================================================================
-if halaman == "1. PO Bulanan":
-    st.title("📦 Rekap & Peramalan PO Bulanan (Model AR)")
-    st.caption(
-        "Menampilkan rekap historis dan proyeksi 3 bulan ke depan menggunakan Autoregresi (AR)."
-    )
-
-    df_akt = st.session_state.df_bulanan.copy()
-    df_pred, df_eval_bulanan = buat_prediksi_ar_bulanan(df_akt)
-    df_gabungan = pd.concat([df_akt, df_pred], ignore_index=True)
-
-    baris_pred_1 = df_pred.iloc[0]
-    p_target = int(baris_pred_1["Periode"])
-    bln_target = baris_pred_1["Bulan"]
-    thn_target = int(baris_pred_1["Tahun"])
-    val_pred_awal = int(baris_pred_1["Jumlah PO"])
-
-    with st.container(border=True):
-        st.subheader(
-            f"✏️ Input Realisasi Aktual: {bln_target} {thn_target} (Periode {p_target})"
-        )
-        st.write(
-            f"Angka prediksi AR saat ini untuk **{bln_target} {thn_target}** adalah **{val_pred_awal:,} pcs**. "
-            "Masukkan angka realisasi jika sudah tersedia:"
-        )
-        col_in, col_btn = st.columns([2, 1])
-        with col_in:
-            nilai_aktual_baru = st.number_input(
-                f"Jumlah PO Aktual ({bln_target} {thn_target}):",
-                min_value=0,
-                value=val_pred_awal,
-                step=10,
-                key=f"input_
