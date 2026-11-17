@@ -97,7 +97,8 @@ def buat_prediksi_ar_bulanan(df_aktual: pd.DataFrame):
     lags = min(2, len(y) - 1) if len(y) > 3 else 1
 
     try:
-        model = AutoReg(y, lags=lags, old_names=False)
+        # Model AutoReg murni tanpa argumen tambahan yang berisiko error
+        model = AutoReg(y, lags=lags)
         model_fitted = model.fit()
         pred = model_fitted.predict(start=len(y), end=len(y) + 2)
         df_pred["Jumlah PO"] = np.maximum(0, np.round(pred)).astype(int)
@@ -106,7 +107,7 @@ def buat_prediksi_ar_bulanan(df_aktual: pd.DataFrame):
         mad_val = int(np.round(np.mean(np.abs(y[lags:] - y_fit))))
         model_name = f"AutoReg (Lag {lags})"
     except Exception as e:
-        # Fallback rata-rata bergerak jika statsmodels gagal
+        # Fallback rata-rata 3 bulan terakhir jika gagal total
         mean_val = int(np.round(np.mean(y[-3:]))) if len(y) >= 3 else int(np.round(np.mean(y)))
         df_pred["Jumlah PO"] = mean_val
         mad_val = int(np.round(np.mean(np.abs(y - np.mean(y)))))
@@ -536,117 +537,4 @@ elif halaman == "2. Peramalan Produk Utama":
             with cols_input[idx]:
                 nilai_baru_dict[prod] = st.number_input(
                     f"{prod} (pcs):",
-                    min_value=0,
-                    value=int(baris_pred_p1[prod]),
-                    step=5,
-                    key=f"in_{prod}_{p_target}"
-                )
-
-        if st.button("✅ Simpan Realisasi & Update Prediksi VAR", type="primary"):
-            new_row = {
-                "Tahun": thn_target,
-                "Bulan": bln_target,
-                "Periode": p_target,
-                "Status Data": "Aktual"
-            }
-            for prod in daftar_prod:
-                new_row[prod] = int(nilai_baru_dict[prod])
-
-            st.session_state.df_produk = pd.concat([df_akt_prod, pd.DataFrame([new_row])], ignore_index=True)
-            st.success(f"Realisasi produk bulan {bln_target} {thn_target} berhasil disimpan!")
-            st.rerun()
-
-    col_hdr_p, col_edit_btn_p = st.columns([3, 1])
-    with col_hdr_p:
-        st.subheader("📋 Tabel Historis & Proyeksi Produk (VAR)")
-    with col_edit_btn_p:
-        st.write("")
-        if not st.session_state.mode_edit_produk:
-            if st.button("✏️ Edit Data Historis", key="btn_edit_prod", use_container_width=True):
-                st.session_state.mode_edit_produk = True
-                st.rerun()
-        else:
-            if st.button("❌ Batal Edit", key="btn_batal_prod", use_container_width=True):
-                st.session_state.mode_edit_produk = False
-                st.rerun()
-
-    if st.session_state.mode_edit_produk:
-        st.info("Mode Edit Aktif: Koreksi angka historis produk, lalu klik **Simpan Perubahan**.")
-        edited_prod = st.data_editor(
-            df_akt_prod,
-            disabled=["Tahun", "Bulan", "Periode", "Status Data"],
-            hide_index=True,
-            use_container_width=True,
-            height=450,
-            key="editor_hist_produk"
-        )
-        if st.button("💾 Simpan Perubahan Data Produk", type="primary"):
-            for prod in daftar_prod:
-                edited_prod[prod] = edited_prod[prod].fillna(0).astype(int)
-            st.session_state.df_produk = edited_prod
-            st.session_state.mode_edit_produk = False
-            st.success("Perubahan data historis produk berhasil disimpan!")
-            st.rerun()
-    else:
-        fmt_dict = {prod: "{:,}" for prod in daftar_prod}
-        styled_prod = df_gabungan_prod.style.apply(warnai_baris_prediksi, axis=1).format(fmt_dict)
-        st.dataframe(styled_prod, use_container_width=True, height=480, hide_index=True)
-
-        st.subheader("📊 Evaluasi Model Vector Autoregression (VAR) per Produk")
-        st.dataframe(df_eval_prod, use_container_width=True, hide_index=True)
-
-        col_dlp1, col_dlp2 = st.columns(2)
-        with col_dlp1:
-            csv_prod = df_gabungan_prod.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "📥 Download Prediksi (CSV)",
-                data=csv_prod,
-                file_name="produk_var.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        with col_dlp2:
-            excel_prod = buat_file_excel(df_gabungan_prod, df_eval_prod, "Produk Utama", daftar_prod)
-            st.download_button(
-                "📊 Download Prediksi (Excel)",
-                data=excel_prod,
-                file_name="produk_var.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-
-    st.markdown("---")
-
-    st.subheader("📈 Grafik Tren Produk (Aktual vs Prediksi VAR)")
-    palette = ["#1E3A5F", "#D97706", "#059669", "#7C3AED", "#DC2626", "#0284C7"]
-    fig_prod = go.Figure()
-
-    for i, prod in enumerate(daftar_prod):
-        warna = palette[i % len(palette)]
-        fig_prod.add_trace(go.Scatter(
-            x=df_akt_prod["Periode"],
-            y=df_akt_prod[prod],
-            mode="lines+markers",
-            name=f"{prod} (Aktual)",
-            line=dict(color=warna, width=2.5),
-            marker=dict(size=5)
-        ))
-        df_sambung = pd.concat([df_akt_prod.tail(1), df_pred_prod], ignore_index=True)
-        fig_prod.add_trace(go.Scatter(
-            x=df_sambung["Periode"],
-            y=df_sambung[prod],
-            mode="lines+markers",
-            name=f"{prod} (Prediksi VAR)",
-            line=dict(color=warna, width=2.5, dash="dash"),
-            marker=dict(size=8, symbol="diamond")
-        ))
-
-    fig_prod.update_layout(
-        xaxis_title="Periode (Bulan ke-)",
-        yaxis_title="Jumlah PO (pcs)",
-        hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        height=480,
-        margin=dict(l=20, r=20, t=40, b=20)
-    )
-    st.plotly_chart(fig_prod, use_container_width=True)
+                    min
