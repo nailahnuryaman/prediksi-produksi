@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-st.set_page_config(page_title="Dashboard Peramalan PO Konveksi (VAR & AR)", layout="wide")
+st.set_page_config(page_title="Dashboard Peramalan PO Konveksi", layout="wide")
 
 NAMA_BULAN = [
     "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -101,15 +101,20 @@ def buat_prediksi_ar_bulanan(df_aktual: pd.DataFrame):
         model_fitted = model.fit()
         pred = model_fitted.predict(start=len(y), end=len(y) + 2)
         df_pred["Jumlah PO"] = np.maximum(0, np.round(pred)).astype(int)
-        y_fit = np.maximum(0, model_fitted.fittedvalues)
-        mad_val = int(np.round(np.mean(np.abs(y[lags:] - y_fit[lags:]))))
-    except Exception:
-        df_pred["Jumlah PO"] = int(y[-1]) if len(y) > 0 else 0
-        mad_val = 0
+        
+        y_fit = model_fitted.fittedvalues
+        mad_val = int(np.round(np.mean(np.abs(y[lags:] - y_fit))))
+        model_name = f"AutoReg (Lag {lags})"
+    except Exception as e:
+        # Fallback rata-rata bergerak jika statsmodels gagal
+        mean_val = int(np.round(np.mean(y[-3:]))) if len(y) >= 3 else int(np.round(np.mean(y)))
+        df_pred["Jumlah PO"] = mean_val
+        mad_val = int(np.round(np.mean(np.abs(y - np.mean(y)))))
+        model_name = "AutoReg (Fallback)"
 
     df_eval = pd.DataFrame([
         {"Metrik / Keterangan": "Rata-rata PO Aktual / Bulan", "Jumlah PO": f"{int(np.round(np.mean(y))):,}"},
-        {"Metrik / Keterangan": "Model yang Digunakan", "Jumlah PO": f"AutoReg (Lag {lags})"},
+        {"Metrik / Keterangan": "Model yang Digunakan", "Jumlah PO": model_name},
         {"Metrik / Keterangan": "Rata-rata Meleset / Error (MAD)", "Jumlah PO": f"± {mad_val:,} pcs"}
     ])
     return df_pred[["Tahun", "Bulan", "Periode", "Jumlah PO", "Status Data"]], df_eval
@@ -136,12 +141,10 @@ def buat_prediksi_var_produk(df_aktual: pd.DataFrame, kolom_target: list):
     row_mad = {"Metrik / Keterangan": "Rata-rata Meleset / Error (MAD)"}
 
     try:
-        # Menggunakan Vector Autoregression (VAR) untuk multi-produk
         model = VAR(data_matrix)
         lag_order = min(1, len(data_matrix) - 1)
         results = model.fit(maxlags=lag_order, ic=None)
         
-        # Prediksi 3 langkah ke depan
         lag_value = results.k_ar
         forecast = results.forecast(data_matrix.values[-lag_value:], steps=3)
         
@@ -158,13 +161,13 @@ def buat_prediksi_var_produk(df_aktual: pd.DataFrame, kolom_target: list):
             row_mad[col] = f"± {mad_val:,} pcs"
             
     except Exception:
-        # Fallback jika model VAR gagal konvergensi
         for col in kolom_target:
-            val = int(data_matrix[col].iloc[-1]) if len(data_matrix) > 0 else 0
-            df_pred[col] = val
-            row_rata2[col] = f"{int(np.round(np.mean(data_matrix[col]))):,}"
-            row_model_info[col] = "VAR Fallback (Mean)"
-            row_mad[col] = "± 0 pcs"
+            y_col = data_matrix[col].values
+            mean_col = int(np.round(np.mean(y_col[-3:]))) if len(y_col) >= 3 else int(np.round(np.mean(y_col)))
+            df_pred[col] = mean_col
+            row_rata2[col] = f"{int(np.round(np.mean(y_col))):,}"
+            row_model_info[col] = "VAR (Fallback)"
+            row_mad[col] = f"± {int(np.round(np.mean(np.abs(y_col - np.mean(y_col))))):,} pcs"
 
     kolom_urut = ["Tahun", "Bulan", "Periode"] + kolom_target + ["Status Data"]
     df_eval = pd.DataFrame([row_rata2, row_model_info, row_mad])
@@ -483,7 +486,7 @@ if halaman == "1. PO Bulanan":
     st.plotly_chart(fig, use_container_width=True)
 
 # ==============================================================================
-# HALAMAN 2: PERAMALAN PRODUK UTAMA (MENGGUNAKAN VECTOR AUTOREGRESSION / VAR)
+# HALAMAN 2: PERAMALAN PRODUK UTAMA
 # ==============================================================================
 elif halaman == "2. Peramalan Produk Utama":
     st.title("🧥 Peramalan Produk Utama (Model Vector Autoregression / VAR)")
